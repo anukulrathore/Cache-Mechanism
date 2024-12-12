@@ -17,6 +17,7 @@ const fetchDataFromAPI = async (symbol, period, startTime, endTime) => {
     return response.data;
   } catch (error) {
     console.error('Error fetching data from API:', error);
+    throw new Error('Failed to fetch data from external API');
   }
 };
 
@@ -26,10 +27,10 @@ const determineCacheIntervals = (period, start, end) => {
   const intervalDuration = getIntervalDuration(period); // Function to convert period to ms
   let currentStart = start;
 
-  while (currentStart <= end) {
-    const currentEnd = new Date(currentStart.getTime() + intervalDuration);  
+  while (currentStart < end) {
+    const currentEnd = new Date(Math.min(currentStart.getTime() + intervalDuration, end.getTime())); 
     intervals.push({ key: `${period}-${currentStart.toISOString()}`, start: currentStart, end: currentEnd });
-    currentStart = new Date(currentStart.getTime() + intervalDuration);
+    currentStart = currentEnd;
   }
 
   return intervals;
@@ -92,8 +93,10 @@ app.get('/timeseries', async (req, res) => {
     try {
       for (const interval of missingIntervals) {
         const intervalData = await fetchDataFromAPI(symbol, period, interval.start, interval.end);
-        cache.set(interval.key, intervalData); // Store data in cache
-        data.push(intervalData); // Add data to final result
+        if(intervalData){
+            cache.set(interval.key, intervalData); // Store data in cache
+            data.push(intervalData); // Add data to final result
+        }
       }
     } catch (error) {
       return res.status(500).json({ error: 'Failed to fetch data from external API' });
@@ -107,6 +110,7 @@ app.get('/timeseries', async (req, res) => {
   res.json(data);
 });
 
+//start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
